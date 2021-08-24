@@ -5,7 +5,7 @@ from datetime           import date
 
 from django.http        import JsonResponse
 from django.views       import View
-from django.db.models   import Case, When
+from django.db.models   import Case, When, Q, Prefetch
 from django.db          import transaction
 
 
@@ -120,6 +120,39 @@ class UploadProductView(View):
             Product.objects.get(id=product_id).delete()
 
         return JsonResponse({"MESSAGE" : "NO_CONTENT"}, status=204)
-
  
         
+class SellerListView(View):
+    def get(self, request):
+        category = request.GET.get("category", "")
+
+        user_q    = Q()
+        product_q = Q()
+
+        if category in Origin.Type.names:
+            origin_type = Origin.Type.names.index(category)+1
+            user_q      = Q(product__origin_id=origin_type) 
+            product_q   = Q(origin_id=origin_type)
+        elif category in Storage.Type.names:
+            storage_type = Storage.Type.names.index(category)+1
+            user_q       = Q(product__storage_id=storage_type)
+            product_q    = Q(storage_id=storage_type)
+
+        users = User.objects.filter(user_q).order_by('id').distinct().prefetch_related(
+                Prefetch('product_set', queryset=Product.objects.filter(product_q), to_attr='category')
+        )
+
+        seller = []
+        for user in users:
+            category = list(set([Origin.Type(product.origin_id).name for product in user.category]
+                            + [Storage.Type(product.storage_id).name for product in user.category]))
+
+            seller.append({
+                "id"            : user.id,
+                "kakao_account" : user.kakao_account,
+                "name"          : user.name,
+                "profile_image" : user.profile_image,
+                "category"      : category
+            })
+
+        return JsonResponse({"seller": seller}, status=200)
