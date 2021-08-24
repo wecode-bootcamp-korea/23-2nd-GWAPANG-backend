@@ -318,3 +318,161 @@ class UploadTest(TestCase):
         mocked_s3_client.upload = MagicMock(return_value=MockedResponse())
         response = client.delete("/products/upload?product_id=200", **headers)
         self.assertEqual(response.status_code, 204)
+
+
+class SellerProductsTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.bulk_create([
+            User(
+                id = 1,
+                kakao_account = 'asdf@kakao.com',
+                point = 1000000,
+                name = '유저1',
+                profile_image = 'asdf'
+            ),
+            User(
+                id = 2,
+                kakao_account = 'zxcv@kakao.com',
+                point = 2000000,
+                name = '유저2',
+                profile_image = 'zxcv'
+            )
+        ])
+
+        Origin.objects.bulk_create([
+            Origin(id = 1, name = 'DOMESTIC'),
+            Origin(id = 2, name = 'IMPORTED')
+        ])
+
+        Storage.objects.bulk_create([
+            Storage(id = 1, name = 'COLD'),
+            Storage(id = 2, name = 'FROZEN'),
+            Storage(id = 3, name = 'DRY')
+        ])
+
+        Product.objects.bulk_create([
+            Product(
+                id = 1,
+                name = '상품1',
+                price = 10000,
+                ordered_quantity = 100,
+                description = '상품1입니다',
+                stock = 1000,
+                origin_id = Origin.objects.get(id=1).id,
+                storage_id = Storage.objects.get(id=1).id,
+                user_id = User.objects.get(id=1).id
+            ),
+            Product(
+                id = 2,
+                name = '상품2',
+                price = 20000,
+                ordered_quantity = 200,
+                description = '상품2입니다',
+                stock = 2000,
+                origin_id = Origin.objects.get(id=2).id,
+                storage_id = Storage.objects.get(id=3).id,
+                user_id = User.objects.get(id=2).id
+            ),
+            Product(
+                id = 3,
+                name = '상품3',
+                price = 30000,
+                ordered_quantity = 300,
+                description = '상품3입니다',
+                stock = 3000,
+                origin_id = Origin.objects.get(id=1).id,
+                storage_id = Storage.objects.get(id=2).id,
+                user_id = User.objects.get(id=1).id
+            )
+        ])
+
+        Image.objects.bulk_create([
+            Image(
+                id = 1,
+                url = 'aaaa',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                id = 2,
+                url = 'ssss',
+                is_thumbnail=False,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                id = 3,
+                url = 'dddd',
+                is_thumbnail=False,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                id = 4,
+                url = 'ffff',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=2).id
+            ),
+            Image(
+                id = 5,
+                url = 'gggg',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=3).id
+            )
+        ])
+
+    def tearDown(self):
+        User.objects.all().delete()
+        Origin.objects.all().delete()
+        Storage.objects.all().delete()
+        Product.objects.all().delete()
+        Image.objects.all().delete()
+
+    def test_seller_products_invalid_user_error(self):
+        client = Client()
+        response = client.get('/products/seller/s')
+        self.assertEqual(response.json(), {"message" : "INVALID_USER"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_seller_products_get_success(self):
+        client = Client()
+        response = client.get('/products/seller/1')
+        self.assertEqual(response.json(),
+                {
+                    "item" : [{
+                        "id"    : 1,
+                        "name"  : "상품1",
+                        "price" : "10000.00",
+                        "stock" : 1000,
+                        "image" : "aaaa",
+                        "category" : ["DOMESTIC", "COLD"]
+                    },
+                    {
+                        "id" : 3,
+                        "name" : "상품3",
+                        "price" : "30000.00",
+                        "stock" : 3000,
+                        "image" : "gggg",
+                        "category" : ["DOMESTIC", "FROZEN"]
+                    }]
+                }
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_seller_products_get_category_success(self):
+        self.maxDiff = None
+        client = Client()
+        response = client.get('/products/seller/1?category=COLD')
+
+        self.assertEqual(response.json(),
+                {
+                    "item" : [{
+                        "id"    : 1,
+                        "name"  : "상품1",
+                        "price" : "10000.00",
+                        "stock" : 1000,
+                        "image" : "aaaa",
+                        "category" : ["DOMESTIC", "COLD"]
+                    }]
+                }
+        )
+        self.assertEqual(response.status_code, 200)

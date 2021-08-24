@@ -5,7 +5,7 @@ from datetime           import date
 
 from django.http        import JsonResponse
 from django.views       import View
-from django.db.models   import Case, When
+from django.db.models   import Case, When, Q
 from django.db          import transaction
 
 
@@ -42,6 +42,7 @@ class SearchView(View):
         } for product in products]
 
         return JsonResponse({"seller": seller, "item": item}, status=200)
+
 
 class UploadProductView(View):
     s3_client = boto3.client(
@@ -122,4 +123,30 @@ class UploadProductView(View):
         return JsonResponse({"MESSAGE" : "NO_CONTENT"}, status=204)
 
  
-        
+class SellerProductsView(View):
+    def get(self, request, user_id):
+        category = request.GET.get("category", "")
+ 
+        if not user_id.isdigit():
+            return JsonResponse({"message": "INVALID_USER"}, status=400)
+
+        q = Q(user=user_id)
+
+        if category in Origin.Type.names:
+            q &= Q(origin_id=Origin.Type.names.index(category)+1)
+
+        elif category in Storage.Type.names:
+            q &= Q(storage_id=Storage.Type.names.index(category)+1)
+
+        products = Product.objects.filter(q).annotate(thumbnail=Case(When(image__is_thumbnail=True, then='image__url'))).exclude(thumbnail=None)
+ 
+        item = [{
+            "id"       : product.id,
+            "name"     : product.name,
+            "price"    : product.price,
+            "stock"    : product.stock,
+            "image"    : product.thumbnail,
+            "category" : [Origin.Type(product.origin_id).name, Storage.Type(product.storage_id).name]
+        } for product in products]
+
+        return JsonResponse({"item": item}, status=200)
