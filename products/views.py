@@ -10,7 +10,8 @@ from django.db          import transaction
 
 
 from users.models       import User
-from products.models    import Origin, Storage, Product, Image
+from products.models    import Origin, Storage, Product, Image, Order
+from reviews.models     import Review
 from users.utils        import login
 from my_settings        import ACCESS_KEY_ID, BUCKET_NAME, SECRET_ACESS_KEY, AWS_S3_URL
 
@@ -218,3 +219,45 @@ class SellerProductsView(View):
         } for product in products]
 
         return JsonResponse({"item": item}, status=200)
+
+
+class DetailPageView(View):
+    def get(self, request, product_id):        
+        if not Product.objects.filter(id=product_id).exists():
+            return JsonResponse({"MESSAGE":"NO_ITEM"}, status=400)
+    
+        product = Product.objects.prefetch_related("image_set", "review_set").select_related("user").get(id=product_id)
+        reviews = product.review_set.filter(product=product.id, comment=None)
+        result = [{
+            "product_name"   : product.name,
+            "product_price"  : product.price,
+            "product_stock"  : product.stock,
+            "product_image"  : [image.url for image in product.image_set.all()],
+            "product_review" :[
+                {
+                    "review_writer" : review.user.name, 
+                    "review_image"  : review.image_url,
+                    'profile_image' : review.user.profile_image_url,
+                    "content"       : review.content,
+                    "grade"         : review.grade,
+                    "create_at"     : review.create_at,
+                    "comment"       : {
+                            "comment_writer"    : review.review_set.get(grade=None).user.name,
+                            "comment_content"   : review.review_set.get(grade=None).content,
+                            "comment_create_at" : review.review_set.get(grade=None).create_at                
+                    } if review.review_set.filter(grade=None).exists() else None
+                }
+            for review in reviews] if reviews.exists() else None
+        }]
+
+        return JsonResponse({'RESULT':result}, status=200)
+    
+    @login
+    def post(self, request, product_id):
+        if not Order.objects.filter(user_id = request.user.id, product_id = product_id).exists():
+            return JsonResponse({"MESSAGE": "UNATHORIZED_REVIEW"}, status=401)
+
+        if Review.objects.filter(user_id = request.user.id, product_id = product_id, comment_id=None).exists():
+            return JsonResponse({"MESSAGE": "ALREADY_EXIST_REVIEW"}, status=402)
+        
+        return JsonResponse({'MESSAGE': "SUCCESS"}, status=200)
