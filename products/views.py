@@ -42,6 +42,7 @@ class SearchView(View):
 
         return JsonResponse({"seller": seller, "item": item}, status=200)
 
+
 class ProductView(View):
     s3_client = boto3.client(
         's3',
@@ -177,6 +178,8 @@ class SellerListView(View):
             category = list(set([Origin.Type(product.origin_id).name for product in user.category]
                             + [Storage.Type(product.storage_id).name for product in user.category]))
 
+            category.sort()
+
             seller.append({
                 "id"            : user.id,
                 "kakao_account" : user.kakao_account,
@@ -186,3 +189,32 @@ class SellerListView(View):
             })
 
         return JsonResponse({"seller": seller}, status=200)
+
+
+class SellerProductsView(View):
+    def get(self, request, user_id):
+        category = request.GET.get("category", "")
+ 
+        if not user_id.isdigit():
+            return JsonResponse({"message": "INVALID_USER"}, status=400)
+
+        q = Q(user=user_id)
+
+        if category in Origin.Type.names:
+            q &= Q(origin_id=Origin.Type.names.index(category)+1)
+
+        elif category in Storage.Type.names:
+            q &= Q(storage_id=Storage.Type.names.index(category)+1)
+
+        products = Product.objects.filter(q).annotate(thumbnail=Case(When(image__is_thumbnail=True, then='image__url'))).exclude(thumbnail=None)
+ 
+        item = [{
+            "id"       : product.id,
+            "name"     : product.name,
+            "price"    : product.price,
+            "stock"    : product.stock,
+            "image"    : product.thumbnail,
+            "category" : [Origin.Type(product.origin_id).name, Storage.Type(product.storage_id).name]
+        } for product in products]
+
+        return JsonResponse({"item": item}, status=200)
