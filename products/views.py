@@ -122,4 +122,93 @@ class UploadProductView(View):
         return JsonResponse({"MESSAGE" : "NO_CONTENT"}, status=204)
 
  
+
+class UpdateProductView(View):
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id     = ACCESS_KEY_ID,
+        aws_secret_access_key = SECRET_ACESS_KEY,
+    )
+
+    @login
+    def post(self, request, product_id):
+        name         = request.POST.get('name')
+        price        = request.POST.get('price')
+        description  = request.POST.get('description')
+        stock        = request.POST.get('stock')
+        origin       = request.POST.get('origin')
+        storage      = request.POST.get('storage')
+        images       = request.FILES.getlist('images')
         
+        if not images:
+            return JsonResponse({"MESSAGE": "IMAGE_FILES_NONE"}, status=404)
+
+        with transaction.atomic():
+            product= Product.objects.create(
+                user_id     = request.user.id,
+                name        = name,
+                price       = price,
+                description = description,
+                stock       = stock,
+                origin_id   = origin,
+                storage_id  = storage
+            )           
+
+            Image.objects.bulk_create(
+                [Image( 
+                product_id   = product.id,
+                url          = None,
+                is_thumbnail = True if i ==0 else False
+                )for i in range(len(images))]                
+            )
+
+            for i, image in enumerate(images):
+                my_uuid = str(uuid.uuid4())
+                upload  = Image.objects.filter(product_id = product.id)[i]
+                self.s3_client.upload_fileobj(
+                    image,
+                    BUCKET_NAME,
+                    my_uuid,
+                    ExtraArgs = {
+                        'ContentType' : image.content_type
+                    }
+                )
+
+                image_urls        = f"{AWS_S3_URL}/{my_uuid}"
+                upload.url        = image_urls
+                upload.image_uuid = my_uuid
+                upload.title      = image.name
+                upload.save()
+            
+            for i in range(len(Image.objects.filter(product_id=product_id))):
+                self.s3_client.delete_object(Bucket=BUCKET_NAME, Key=Image.objects.filter(product_id=product_id)[i].image_uuid)
+
+            Product.objects.get(id=product_id).delete()
+            
+            return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
+    
+    @login
+    # @query_debugger
+    def get(self, request, product_id):
+
+        if not Product.objects.filter(id=product_id).exists():
+            return JsonResponse({"MESSAGE":"NO_PRODUCT"}, status=400)        
+
+        product = Product.objects.prefetch_related("image_set").get(id=product_id)
+
+        result = {
+            "name"        : product.name,
+            "price"       : product.price,
+            "stock"       : product.stock,
+            "origin"      : product.origin_id,
+            "storage"     : product.storage_id,
+            "description" : product.description,
+            "images"      : [image.url for image in product.image_set.all()],
+        }
+
+        return JsonResponse({'RESULT':result}, status=200)
+
+
+
+
+
