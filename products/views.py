@@ -15,7 +15,6 @@ from users.utils        import login
 from my_settings        import ACCESS_KEY_ID, BUCKET_NAME, SECRET_ACESS_KEY, AWS_S3_URL
 
 
-
 class SearchView(View):
     def get(self, request):
         keyword  = request.GET.get("keyword", "")
@@ -43,7 +42,7 @@ class SearchView(View):
 
         return JsonResponse({"seller": seller, "item": item}, status=200)
 
-class UploadProductView(View):
+class ProductView(View):
     s3_client = boto3.client(
         's3',
         aws_access_key_id     = ACCESS_KEY_ID,
@@ -59,6 +58,7 @@ class UploadProductView(View):
         origin       = request.POST.get('origin')
         storage      = request.POST.get('storage')
         images       = request.FILES.getlist('images')
+        product_id   = request.GET.get('product_id', None)
         
 
         if not images:
@@ -102,8 +102,16 @@ class UploadProductView(View):
                 upload.url   = image_urls
                 upload.title = image.name
                 upload.save()
+            
+            if product_id:
+                for i in range(len(Image.objects.filter(product_id=product_id))):
+                    self.s3_client.delete_object(Bucket=BUCKET_NAME, Key=Image.objects.filter(product_id=product_id)[i].image_uuid)
 
-        return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
+                Product.objects.get(id=product_id).delete()
+                
+                return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
+            else:
+                return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
 
     @login
     def delete(self, request):
@@ -120,6 +128,28 @@ class UploadProductView(View):
             Product.objects.get(id=product_id).delete()
 
         return JsonResponse({"MESSAGE" : "NO_CONTENT"}, status=204)
+
+
+    @login
+    def get(self, request):
+        product_id = request.GET.get('product_id')
+
+        if not Product.objects.filter(id=product_id).exists():
+            return JsonResponse({"MESSAGE":"NO_PRODUCT"}, status=400)        
+
+        product = Product.objects.prefetch_related("image_set").get(id=product_id)
+
+        result = {
+            "name"        : product.name,
+            "price"       : product.price,
+            "stock"       : product.stock,
+            "origin"      : product.origin_id,
+            "storage"     : product.storage_id,
+            "description" : product.description,
+            "images"      : [image.url for image in product.image_set.all()],
+        }
+
+        return JsonResponse({'RESULT':result}, status=200)
  
         
 class SellerListView(View):
