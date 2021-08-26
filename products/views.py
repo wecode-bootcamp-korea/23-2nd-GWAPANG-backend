@@ -264,11 +264,16 @@ class DetailPageView(View):
         product = Product.objects.prefetch_related("image_set", "review_set").select_related("user").get(id=product_id)
         reviews = product.review_set.filter(product=product.id, comment=None)
         result = [{
-            "product_name"   : product.name,
-            "product_price"  : product.price,
-            "product_stock"  : product.stock,
-            "product_image"  : [image.url for image in product.image_set.all()],
-            "product_review" :[
+            "product_name"        : product.name,
+            "seller_name"         : product.user.name,
+            "seller_image"        : product.user.profile_image,
+            "product_price"       : product.price,
+            "product_stock"       : product.stock,
+            "product_description" : product.description,
+            "product_origin"      : Origin.Type(product.origin_id).name,
+            "product_storage"     : Storage.Type(product.storage_id).name,
+            "product_image"       : [image.url for image in product.image_set.all()],
+            "product_review"      :[
                 {
                     "review_writer" : review.user.name, 
                     "review_image"  : review.image_url,
