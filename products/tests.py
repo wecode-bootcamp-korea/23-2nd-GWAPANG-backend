@@ -702,3 +702,71 @@ class DetailPageTest(TestCase):
         data         = {}
         response  = client.post("/products/200", json.dumps(data) ,content_type="application/json", **header)
         self.assertEqual(response.status_code, 402)
+
+
+class PurchaseTest(TestCase):
+    def setUp(self):
+
+        user1 = User.objects.create(
+            name              = "백선호1", 
+            kakao_account     = "123456", 
+            profile_image_url ='http://k.kakaocdn.net/dn/dScJVH/btq7DShllEz/3X2kXV9W5anK3nmcitWoWk/img_640x640.jpg',
+            email             = 'rhadlfrhq@naver.com',
+            point             = 1000000
+            ) 
+
+        origin = Origin.objects.create(
+                name  = 'Origin1',
+         )
+
+        storage = Storage.objects.create(
+                name  = 'Storage1',
+         )
+
+        Product.objects.create(
+                id               = 200,
+                name             = "product",
+                price            = 10000,
+                description      = 'description',
+                user_id          = user1.id,
+                ordered_quantity = 100,
+                stock            = 1000,
+                origin_id        = origin.id,
+                storage_id       = storage.id,
+        )
+
+    def test_purchase_success(self):
+        client = Client()
+        user   = User.objects.get(name='백선호1')
+        token = jwt.encode({'id': user.id}, SECRET_KEY, algorithm=ALGORITHM)
+        header       = {"HTTP_Authorization" : token}
+        comment      = {
+            'total_price' : 2000,
+            'quantity'    : 20 
+        }
+        response  = client.post("/products/200/purchase", json.dumps(comment) ,content_type="application/json", **header)
+        self.assertEqual(response.status_code, 201)
+
+    def test_purchase_no_point(self):
+        client = Client()
+        user   = User.objects.get(name='백선호1')
+        token = jwt.encode({'id': user.id}, SECRET_KEY, algorithm=ALGORITHM)
+        header       = {"HTTP_Authorization" : token}
+        comment      = {
+            'total_price' : 2000000000,
+            'quantity'    : 20 
+        }
+        response  = client.post("/products/200/purchase", json.dumps(comment) ,content_type="application/json", **header)
+        self.assertEqual(response.status_code, 400)
+
+    def test_purchase_key_error(self):
+        client = Client()
+        user   = User.objects.get(name='백선호1')
+        token = jwt.encode({'id': user.id}, SECRET_KEY, algorithm=ALGORITHM)
+        header       = {"HTTP_Authorization" : token}
+        comment      = {
+            'total_prices' : 2000,
+            'quantity'    : 20 
+        }
+        response  = client.post("/products/200/purchase", json.dumps(comment) ,content_type="application/json", **header)
+        self.assertEqual(response.status_code, 400)
