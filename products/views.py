@@ -153,10 +153,11 @@ class ProductView(View):
 
         return JsonResponse({'RESULT':result}, status=200)
  
-        
+
 class SellerListView(View):
     def get(self, request):
         category = request.GET.get("category", "")
+        order_by = request.GET.get("order_by", "")
 
         user_q    = Q()
         product_q = Q()
@@ -170,24 +171,27 @@ class SellerListView(View):
             user_q       = Q(product__storage_id=storage_type)
             product_q    = Q(storage_id=storage_type)
 
-        users = User.objects.filter(user_q).order_by('id').distinct().prefetch_related(
-                Prefetch('product_set', queryset=Product.objects.filter(product_q), to_attr='category')
-        )
+        if order_by and order_by not in ["order", "id"]:
+            return JsonResponse({"message": "INVALID_ORDER_BY"}, status=400)
 
-        seller = []
-        for user in users:
-            category = list(set([Origin.Type(product.origin_id).name for product in user.category]
-                            + [Storage.Type(product.storage_id).name for product in user.category]))
+        if order_by == "id":
+            order_by = '-' + order_by
+        elif order_by == "order":
+            order_by = '-total_' + order_by
 
-            category.sort()
+        users = []
+        if order_by:
+            users = User.objects.annotate(total_order=Sum('product__ordered_quantity')).order_by(order_by)[:10]
+        else:
+            users = User.objects.filter(user_q).prefetch_related(
+                        Prefetch('product_set', queryset=Product.objects.filter(product_q), to_attr='category')
+            ).order_by('id').distinct()
 
-            seller.append({
-                "id"            : user.id,
-                "kakao_account" : user.kakao_account,
-                "name"          : user.name,
-                "profile_image" : user.profile_image,
-                "category"      : category
-            })
+        seller = [{
+            "id"            : user.id,
+            "name"          : user.name,
+            "profile_image" : user.profile_image,
+        } for user in users]
 
         return JsonResponse({"seller": seller}, status=200)
 
@@ -203,7 +207,6 @@ class SellerProductsView(View):
 
         if category in Origin.Type.names:
             q &= Q(origin_id=Origin.Type.names.index(category)+1)
-
         elif category in Storage.Type.names:
             q &= Q(storage_id=Storage.Type.names.index(category)+1)
 
@@ -215,7 +218,39 @@ class SellerProductsView(View):
             "price"    : product.price,
             "stock"    : product.stock,
             "image"    : product.thumbnail,
-            "category" : [Origin.Type(product.origin_id).name, Storage.Type(product.storage_id).name]
+        } for product in products]
+
+        return JsonResponse({"item": item}, status=200)
+
+
+class ProductListView(View):
+    def get(self, request):
+        category  = request.GET.get("category", "")
+        order_by = request.GET.get("order_by", "")
+
+        q = Q()
+        if category in Origin.Type.names:
+            q = Q(origin_id=Origin.Type.names.index(category)+1)
+        elif category in Storage.Type.names:
+            q = Q(storage_id=Storage.Type.names.index(category)+1)
+
+        if order_by and order_by not in ["order", "stock"]:
+            return JsonResponse({"message": "INVALID_ORDER_BY"}, status=400)
+
+        if order_by == "order":
+            order_by = '-' + order_by + 'ed_quantity'
+        else:
+            order_by = '-id'
+
+        products = Product.objects.filter(q).annotate(thumbnail=Case(When(image__is_thumbnail=True, then='image__url'))).exclude(thumbnail=None).order_by(order_by)[:10]
+
+        item = [{
+            "id"               : product.id,
+            "name"             : product.name,
+            "price"            : product.price,
+            "ordered_quantity" : product.ordered_quantity,
+            "stock"            : product.stock,
+            "image"            : product.thumbnail
         } for product in products]
 
         return JsonResponse({"item": item}, status=200)
