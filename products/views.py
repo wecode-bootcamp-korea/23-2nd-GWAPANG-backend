@@ -261,3 +261,29 @@ class DetailPageView(View):
             return JsonResponse({"MESSAGE": "ALREADY_EXIST_REVIEW"}, status=402)
         
         return JsonResponse({'MESSAGE': "SUCCESS"}, status=200)
+
+
+class PurchaseView(View):
+    @login
+    def post(self, request, product_id):
+        try:
+            data   = json.loads(request.body)
+            with transaction.atomic():
+                user = User.objects.get(id=request.user.id)
+                
+                if user.point < data['total_price']:
+                    return JsonResponse({"MESSAGE":"INSUFFICIENT_POINTS"}, status=400)
+
+                user.point = user.point - data['total_price']
+                user.save()            
+                
+                Order.objects.create(
+                    user_id  = request.user.id,
+                    product_id  = product_id,
+                    quantity = data['quantity']
+                )
+            
+            return JsonResponse({'MESSAGE': "SUCCESS"}, status=201)
+        
+        except KeyError:
+            return JsonResponse({"MESSAGE": "KEY_ERROR"}, status=400)
