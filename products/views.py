@@ -5,7 +5,7 @@ from datetime           import date
 
 from django.http        import JsonResponse
 from django.views       import View
-from django.db.models   import Case, When, Q, Prefetch
+from django.db.models   import Case, When, Q, Prefetch, Sum, F
 from django.db          import transaction
 
 
@@ -61,13 +61,12 @@ class ProductView(View):
         storage      = request.POST.get('storage')
         images       = request.FILES.getlist('images')
         product_id   = request.GET.get('product_id', None)
-        
 
         if not images:
             return JsonResponse({"MESSAGE": "IMAGE_FILES_NONE"}, status=404)
 
-        if Product.objects.filter(user_id=request.user.id, create_at=date.today()).count() > 3:
-            return JsonResponse({"MESSAGE": "YOU_CANT_UPLOAD"}, status=400)
+        # if Product.objects.filter(user_id=request.user.id, create_at=date.today()).count() > 3:
+        #     return JsonResponse({"MESSAGE": "YOU_CANT_UPLOAD"}, status=400)
 
         with transaction.atomic():
             product= Product.objects.create(
@@ -101,6 +100,7 @@ class ProductView(View):
                 )
 
                 image_urls   = f"{AWS_S3_URL}/{my_uuid}"
+                upload.image_uuid = my_uuid
                 upload.url   = image_urls
                 upload.title = image.name
                 upload.save()
@@ -108,10 +108,10 @@ class ProductView(View):
             if product_id:
                 for i in range(len(Image.objects.filter(product_id=product_id))):
                     self.s3_client.delete_object(Bucket=BUCKET_NAME, Key=Image.objects.filter(product_id=product_id)[i].image_uuid)
-
-                Product.objects.get(id=product_id).delete()
                 
-                return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
+                Product.objects.filter(id=product_id).delete()
+
+                return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS1"}, status=202)
             else:
                 return JsonResponse({"PRODUCT_ID" : product.id, 'MESSAGE' : "SUCCESS"}, status=201)
 
@@ -126,7 +126,7 @@ class ProductView(View):
 
             for i in range(len(Image.objects.filter(product_id=product_id))):
                 self.s3_client.delete_object(Bucket=BUCKET_NAME, Key=Image.objects.filter(product_id=product_id)[i].image_uuid)
-
+            
             Product.objects.get(id=product_id).delete()
 
         return JsonResponse({"MESSAGE" : "NO_CONTENT"}, status=204)
@@ -272,7 +272,7 @@ class DetailPageView(View):
                 {
                     "review_writer" : review.user.name, 
                     "review_image"  : review.image_url,
-                    'profile_image' : review.user.profile_image_url,
+                    'profile_image' : review.user.profile_image,
                     "content"       : review.content,
                     "grade"         : review.grade,
                     "create_at"     : review.create_at,
@@ -304,19 +304,24 @@ class PurchaseView(View):
         try:
             data   = json.loads(request.body)
             with transaction.atomic():
-                user = User.objects.get(id=request.user.id)
+                product = Product.objects.select_related("user").get(id=product_id)
                 
-                if user.point < data['total_price']:
+                if product.user.point < data['total_price']:
                     return JsonResponse({"MESSAGE":"INSUFFICIENT_POINTS"}, status=400)
 
-                user.point = user.point - data['total_price']
-                user.save()            
+                product.user.point = F('point') - data['total_price']
+                product.user.save()            
+                
+                product.ordered_quantity = F("ordered_quantity") + data['quantity']
+                product.stock            = F("stock") - data['quantity'] 
+                product.save()
                 
                 Order.objects.create(
                     user_id  = request.user.id,
                     product_id  = product_id,
                     quantity = data['quantity']
                 )
+                
             
             return JsonResponse({'MESSAGE': "SUCCESS"}, status=201)
         

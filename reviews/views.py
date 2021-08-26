@@ -31,7 +31,6 @@ class ReviewView(View):
             if not image:
                 return JsonResponse({"MESSAGE": "IMAGE_FILES_NONE"}, status=404)
 
-
             if not content:
                 return JsonResponse({"MESSAGE":"NO_CONTENT"}, status=400)
             
@@ -88,7 +87,6 @@ class CommentView(View):
         except KeyError:
             return JsonResponse({"MESSAGE": "KEY_ERROR"}, status=400)
 
-    @query_debugger
     def get(self, request, product_id):
         
         reviews = Review.objects.filter(product_id = product_id, comment_id=None).select_related('user').prefetch_related('review_set')
@@ -96,7 +94,7 @@ class CommentView(View):
         result  = [{
                     "review_writer" : review.user.name, 
                     "review_image"  : review.image_url,
-                    'profile_image' : review.user.profile_image_url,
+                    'profile_image' : review.user.profile_image,
                     "content"       : review.content,
                     "grade"         : review.grade,
                     "create_at"     : review.create_at,
