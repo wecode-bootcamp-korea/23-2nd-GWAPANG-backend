@@ -208,3 +208,162 @@ class PostReviewCommentTest(TestCase):
         client = Client()
         response  = client.get("/reviews/200/comment", content_type="application/json")
         self.assertEqual(response.status_code, 200)
+
+
+class SetUpTearDown(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.bulk_create([
+            User(
+                kakao_account = 'asdf@kakao.com',
+                point = 1000000,
+                name = '유저1',
+                profile_image = 'asdf',
+                email = 'asdf@kakao.com'
+            ),
+            User(
+                kakao_account = 'zxcv@kakao.com',
+                point = 2000000,
+                name = '유저2',
+                profile_image = 'zxcv',
+                email = 'zxcv@kakao.com'
+            )
+        ])
+
+        Origin.objects.bulk_create([
+            Origin(name = 'DOMESTIC'),
+            Origin(name = 'IMPORTED')
+        ])
+
+        Storage.objects.bulk_create([
+            Storage(name = 'COLD'),
+            Storage(name = 'FROZEN'),
+            Storage(name = 'DRY')
+        ])
+
+        Product.objects.bulk_create([
+            Product(
+                name = '상품1',
+                price = 10000,
+                ordered_quantity = 100,
+                description = '상품1입니다',
+                stock = 1000,
+                origin_id = Origin.Type(1).value,
+                storage_id = Storage.Type(1).value,
+                user_id = User.objects.get(id=1).id
+            ),
+            Product(
+                name = '상품2',
+                price = 20000,
+                ordered_quantity = 200,
+                description = '상품2입니다',
+                stock = 2000,
+                origin_id = Origin.Type(2).value,
+                storage_id = Storage.Type(3).value,
+                user_id = User.objects.get(id=2).id
+            ),
+            Product(
+                name = '상품3',
+                price = 30000,
+                ordered_quantity = 300,
+                description = '상품3입니다',
+                stock = 3000,
+                origin_id = Origin.Type(1).value,
+                storage_id = Storage.Type(2).value,
+                user_id = User.objects.get(id=1).id
+            )
+        ])
+
+        Image.objects.bulk_create([
+            Image(
+                url = 'aaaa',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                url = 'ssss',
+                is_thumbnail=False,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                url = 'dddd',
+                is_thumbnail=False,
+                product_id = Product.objects.get(id=1).id
+            ),
+            Image(
+                url = 'ffff',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=2).id
+            ),
+            Image(
+                url = 'gggg',
+                is_thumbnail=True,
+                product_id = Product.objects.get(id=3).id
+            )
+        ])
+
+        Review.objects.bulk_create([
+            Review(
+                user_id    = User.objects.get(id=1).id,
+                image_url  = "review1",
+                grade      = 3,
+                content    = "리뷰1",
+                product_id = Product.objects.get(id=1).id
+            ),
+            Review(
+                user_id    = User.objects.get(id=2).id,
+                image_url  = "review2",
+                grade      = 1,
+                content    = "리뷰2",
+                product_id = Product.objects.get(id=2).id
+            ),
+            Review(
+                user_id    = User.objects.get(id=1).id,
+                image_url  = "review3",
+                grade      = 4,
+                content    = "리뷰3",
+                product_id = Product.objects.get(id=3).id
+            )
+            Review(
+                user_id    = User.objects.get(id=2).id,
+                content    = "코멘트1",
+                product_id = Product.objects.get(id=1).id
+                comment_id = Review.objects.get(id=1).id
+        ])
+
+    def tearDown(self):
+        User.objects.all().delete()
+        Origin.objects.all().delete()
+        Storage.objects.all().delete()
+        Product.objects.all().delete()
+        Image.objects.all().delete()
+
+
+class RecentReviewTest(SetUpTearDown):
+    def test_recent_review_get_success(self):
+        self.maxDiff = None
+        client = Client()
+        response = client.get('/reviews/recent')
+        self.assertEqual(response.json(),
+                {
+                    "recent_review" : [{
+                        "product_name" : "상품3",
+                        "image_url" : "review3",
+                        "grade" : "4",
+                        "content" : "리뷰3"
+                    },
+                    {
+                        "product_name" : "상품2",
+                        "image_url" : "review2",
+                        "grade" : "1",
+                        "content" : "리뷰2"
+                    },
+                    {
+                        "product_name" : "상품1",
+                        "image_url" : "review3",
+                        "grade" : "3",
+                        "content" : "리뷰1"
+                    }]
+                }
+        )
+        self.assertEqual(response.status_code, 200)

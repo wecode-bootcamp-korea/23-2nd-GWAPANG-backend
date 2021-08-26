@@ -109,3 +109,17 @@ class CommentView(View):
             for review in reviews] if True else None
 
         return JsonResponse({'RESULT':result}, status=200)
+
+
+class RecentReviewView(View):
+    def get(self, request):
+        reviews = Review.objects.filter(comment_id=None).select_related('product').order_by('-create_at')
+
+        recent_review = [{
+            "product_name" : review.product.name,
+            "image_url"    : review.image_url,
+            "grade"        : review.grade,
+            "content"      : review.content
+        } for review in reviews]
+
+        return JsonResponse({"recent_review": recent_review}, status=200)
