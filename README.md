@@ -18,7 +18,7 @@
 - [프론트엔드 github 링크] :https://github.com/wecode-bootcamp-korea/23-2nd-GWAPANG-frontend
 
 ## 프로젝트 구현영상
-
+- https://youtu.be/-L_NpY3ExXc
 
 # 적용 기술 및 구현 기능
 
