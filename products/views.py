@@ -65,8 +65,8 @@ class ProductView(View):
         if not images:
             return JsonResponse({"MESSAGE": "IMAGE_FILES_NONE"}, status=404)
 
-        # if Product.objects.filter(user_id=request.user.id, create_at=date.today()).count() > 3:
-        #     return JsonResponse({"MESSAGE": "YOU_CANT_UPLOAD"}, status=400)
+        if Product.objects.filter(user_id=request.user.id, create_at=date.today()).count() > 3:
+            return JsonResponse({"MESSAGE": "YOU_CANT_UPLOAD"}, status=400)
 
         with transaction.atomic():
             product= Product.objects.create(
